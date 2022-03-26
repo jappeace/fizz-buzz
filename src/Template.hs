@@ -8,39 +8,79 @@ where
 import Control.Monad
 import Control.Exception
 import Control.Concurrent
+import Data.IORef
 
 main :: IO ()
 main = do
-  this <- myThreadId
-  forkIO $ fizz this
-  forkIO $ buzz this
-  mainLoop 30 1
+  emitter <- forkIO $ emitter
+  fizzTid <- forkIO $ fizz emitter
+  buzzTid <- forkIO $ buzz emitter
+  numsTid  <- forkIO $ numSender emitter
+  let threads = [fizzTid, buzzTid, numsTid, emitter]
+  forever $ void $ traverse (flip throwTo Flush) threads
 
-data FizzBuzzMsg = MkFizz
-                 | MkBuzz
+emitter :: IO ()
+emitter = do
+  ref <- newIORef []
+  forever $
+      handle (\case
+                   Flush -> do
+                     res <- readIORef ref
+                     writeIORef ref []
+                     if (hasn't (traversed . failing _Fizz _Buzz) res) then
+                       print $ head $ res ^.. traversed . _Num
+                     else do -- has a fizz or buzz (or both
+                        traverseOf (traversed . _Fizz) (putStr . show)
+                        traverseOf (traversed . _Buzz) (putStr . show)
+                        putStr "\n"
+            ) $ handle (putItIn ref) $ waitMsg
+
+putItIn :: IORef [FizzBuzzMsg] -> FizzBuzzMsg -> IO ()
+putItIn ref msg = modifyIORef ref (msg :)
+
+data FlushMsg = Flush
+                deriving (Exception, Show)
+
+data FizzBuzzMsg = Fizz
+                 | Buzz
+                 | Num Int
                  deriving (Exception, Show)
 
 mainLoop :: Int -> Int -> IO ()
-mainLoop untill cur =
-    (handle (mask_ . \case
-              MkFizz -> putStr "Fizz"
-              MkBuzz -> putStr "Buzz"
-              -- fizzbuzz??
-          ) $ do
-      threadDelay 0_001_000
-      mask_ $ putStrLn $ "\n" <> show cur) `finally`when (cur < untill) (mainLoop untill (cur + 1))
+mainLoop untill cur = pure ()
 
+numSender :: ThreadId -> IO ()
+numSender tid = do
+    ref <- newIORef 0
+    forever $
+      handle (\case
+                   Flush -> do
+                     cur <- atomicModifyIORef ref (\num -> (num + 1, num))
+                     throwTo tid $ Num cur
+                     pure ()
+               ) waitMsg
 
+waitMsg :: IO ()
+waitMsg = threadDelay 10_000_000
 
 fizz :: ThreadId -> IO ()
-fizz tid = do
-  forever $ do
-    threadDelay 0_003_000
-    throwTo tid MkFizz
-
+fizz tid = forever $
+  handle (\case
+             Flush -> throwTo tid Fizz) $
+    handle (\case
+             Flush -> waitMsg) $
+      handle (\case
+              Flush -> waitMsg) $ waitMsg
 
 buzz :: ThreadId -> IO ()
 buzz tid = do
-  forever $ do
-    threadDelay 0_005_000
-    throwTo tid MkBuzz
+  handle (\case
+             Flush -> throwTo tid Buzz) $
+    handle (\case
+             Flush -> waitMsg) $
+    handle (\case
+             Flush -> waitMsg) $
+    handle (\case
+             Flush -> waitMsg) $
+      handle (\case
+              Flush -> waitMsg) $ waitMsg
