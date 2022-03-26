@@ -17,7 +17,9 @@ main = do
   buzzTid <- forkIO $ buzz emitter
   numsTid  <- forkIO $ numSender emitter
   let threads = [fizzTid, buzzTid, numsTid, emitter]
-  forever $ void $ traverse (flip throwTo Flush) threads
+  forever $ do
+    void $ traverse (flip throwTo Flush) threads
+    threadDelay 0_0001_000 -- is this neccisary?
 
 emitter :: IO ()
 emitter = do
