@@ -1,92 +1,46 @@
 [![https://jappieklooster.nl](https://img.shields.io/badge/blog-jappieklooster.nl-lightgrey)](https://jappieklooster.nl/tag/haskell.html)
 [![Jappiejappie](https://img.shields.io/badge/twitch.tv-jappiejappie-purple?logo=twitch)](https://www.twitch.tv/jappiejappie)
 [![Jappiejappie](https://img.shields.io/badge/youtube-jappieklooster-red?logo=youtube)](https://www.youtube.com/channel/UCQxmXSQEYyCeBC6urMWRPVw)
-[![Githbu actions build status](https://img.shields.io/github/workflow/status/jappeace/haskell-template-project/Test)](https://github.com/jappeace/haskell-template-project/actions)
 [![Jappiejappie](https://img.shields.io/badge/discord-jappiejappie-black?logo=discord)](https://discord.gg/Hp4agqy)
-[![Hackage version](https://img.shields.io/hackage/v/template.svg?label=Hackage)](https://hackage.haskell.org/package/template) 
 
-> The eye that looks ahead to the safe course is closed forever.
+> What then is the piping of Heaven?
 
-Haskell project template.
+This is an exploration into async exceptions through fizz buzz.
 
-Set up cabal within a nix shell.
-If you like nix this is a good way of doing haskell development.
+First I tried doing this time based, but that didn't quite
+work out because the threads went out of sync.
+Then I made a central "Flush" thread that indicates to the workers
+what tick they were.
+This worked.
 
-similar to: https://github.com/monadfix/nix-cabal
-except this has a makefile and ghcid.
-We also make aggressive use of [pinning](https://nixos.wiki/wiki/FAQ/Pinning_Nixpkgs)
-ensuring project builds for ever (theoretically).
+There was still some syncing issue with the exceptions going
+from the worker thread -> emitter thread.
+But I fixed this by adding a timeout (this didn't go out of sync
+because the ticks are emmited from same thread).
 
-Comes with:
-+ [GHCID](https://jappieklooster.nl/ghcid-for-multi-package-projects.html)
-+ a nix shell, meaning somewhat platform independence.
-  + which is pinned by default
-+ A couple of handy make commands.
-+ Starting haskell files, assuming we put practically all code in library
-+ Working HSpec, The detection macro will pickup any file ending with Spec.hs
+# Meditations on async exceptions
 
-## Usage
+I thought these could be a channel replacement.
+Looks like they can be.
+And  are even strictly more powerful since (even pure)
+computations can be interrupted.
+It goes the other way of co-routines becuase the
+interuption arrives from the outside (maybe even co-co-routines?)
+, all the threads can do is disable the exceptions for blocks through masking
+or handle them.
 
-### Modifying for your project
-Assuming the name of your new project is `new-project`.
+I even start to suspect this coding style is safe, 
+because if you only catch your specific message type,
+other async exceptions aren't caught
+(like ThreadKilled, which you shouldn't catch without rethrowing!).
 
-```
-git clone git@github.com:jappeace/haskell-template-project.git new-project
-cd new-project
-```
+Of course, if you introduce this in a team, this nuance maybe lost
+and it may be better to just keep on out right banning catching async exceptions.
+Furthermore I'm not sure how fast this mechanism is compared to channel.
+It maybe unlikely the async exception mechanismm has received much
+performance attention (even though it's really cool!).
 
-+ [ ] Edit package.yaml,
-    + [ ] find and replace template with `new-project`
-    + [ ] Update copyright
-    + [ ] Update github
-+ [ ] Run `make hpack` to update cabal files
-+ [ ] remove template.cabal
-+ [ ] Edit Changelog.md
-  + [ ] replace template with `new-project`
-  + [ ] Also describe your version 1.0.0 release.
-+ [ ] Edit default.nix, replace template with `new-project`.
-+ [ ] Edit copyright in LICENSE
-+ [ ] Edit `nix/bundle.nix` to point to the executable
-+ [ ] Edit `nix/ci.nix` and `nix/pkgs.nix` for name of package
-+ [ ] Edit `shell.nix`
-
-#### Reconfigure remotes
-```
-git remote add template git@github.com:jappeace/haskell-template-project.git
-git remote set-url origin git@github.com:YOUR-ORG-OR-USER-NAME/new-project.git
-```
-
-We can get template updates like this if we want to by doing `git pull template`.
-There will be a large amount of conflicts, but the merge commit should solve them permanently.
-
-#### Readme
-
-+ [ ] Select desired badges. 
-  + [ ] Point build badges to right project
-+ [ ] Give short project description.
-+ [ ] Add new quote suited for the project.
-  For example for [fakedata-quickcheck](https://github.com/fakedata-haskell/fakedata-quickcheck#readme)
-  I used Kant because
-  he dealt with the question "what is truth" a lot.
-+ [ ] Truncate this checklist
-+ [ ] Truncate motivation for using  this template
-
-### Tools
-Enter the nix shell.
-```
-nix-shell
-```
-You can checkout the makefile to see what's available:
-```
-cat makefile
-```
-
-### Running
-```
-make run
-```
-
-### Fast filewatch which runs tests
-```
-make ghcid
-```
+What I've been also curious about is how to represent  this 
+mechanism as an algebra of sorts.
+Imagine if we didn't have the runtime, how would you recreate this.
+After all it can interrupt pure code.
